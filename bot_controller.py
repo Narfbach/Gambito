@@ -5,7 +5,7 @@ import chess
 import requests
 from vision import Vision
 from engine import ChessEngine
-from input import human_drag
+from input import human_drag, human_click
 
 class BotController:
     def __init__(self):
@@ -148,13 +148,27 @@ class BotController:
                     if current_fen != last_fen:
                         self.board.set_fen(current_fen)
                         last_fen = current_fen
-                        self.log(f"Board Updated: {current_fen}")
+                        self.log(f"Board Updated: {current_fen[:40]}...")
+                        
+                        # Check if game is over
+                        if self.board.is_game_over():
+                            outcome = self.board.outcome()
+                            if outcome:
+                                self.log(f"Game Over: {outcome.termination.name}")
+                            else:
+                                self.log("Game Over")
+                            # Reset for next game
+                            self.board = chess.Board()
+                            self.move_count = 0
+                            last_fen = None
+                            self.log("Waiting for new game...")
+                            continue
                         
                         # Check Turn
                         is_our_turn = (self.board.turn == chess.WHITE and is_white) or \
                                       (self.board.turn == chess.BLACK and not is_white)
                                       
-                        if is_our_turn and not self.board.is_game_over():
+                        if is_our_turn:
                             self.log(f"My Turn ({'White' if is_white else 'Black'})")
                             
                             # Think
@@ -167,12 +181,28 @@ class BotController:
                                 self.log(f"Waiting {delay:.2f}s...")
                                 time.sleep(delay)
                                 
-                                # Move Mouse
+                                # Parse move
                                 move = chess.Move.from_uci(best_move_uci)
                                 x1, y1 = self.vision.get_square_center_from_index(move.from_square, is_white)
                                 x2, y2 = self.vision.get_square_center_from_index(move.to_square, is_white)
                                 
+                                # Execute drag
                                 human_drag(x1, y1, x2, y2)
+                                
+                                # Handle pawn promotion
+                                if move.promotion:
+                                    time.sleep(0.15)  # Wait for promotion dialog
+                                    # Queen is first option in Chess.com selector
+                                    # Dialog appears at destination square
+                                    sq_size = self.vision.square_size
+                                    if is_white:
+                                        # White promotes on rank 8, dialog appears above
+                                        promo_y = y2 - int(sq_size * 0.4)
+                                    else:
+                                        # Black promotes on rank 1, dialog appears below
+                                        promo_y = y2 + int(sq_size * 0.4)
+                                    human_click(x2, promo_y)
+                                    self.log(f"Promoted to {chess.piece_name(move.promotion).title()}")
                                 
                                 # Optimistic update to prevent double move
                                 self.board.push(move)
