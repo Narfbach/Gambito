@@ -1,9 +1,8 @@
+"""Human-like mouse movement using Bezier curves."""
 import pyautogui
 import random
 import time
 import numpy as np
-from scipy import interpolate
-import math
 
 # Disable pyautogui fail-safe to allow corner movement if necessary, 
 # but usually good to keep on. We'll keep it on for safety.

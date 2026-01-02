@@ -154,10 +154,10 @@ class Vision:
     def get_square_status(self, image, rank, file):
         """
         Returns the status of a square: 'empty', 'white', 'black'.
-        Based on simple color heuristics for Chess.com default theme.
+        Based on color variance and brightness analysis.
         """
         if self.board_top_left is None or self.square_size is None:
-            return None
+            return 'empty'
             
         bx, by = self.board_top_left
         s = self.square_size
@@ -166,30 +166,22 @@ class Vision:
         
         # Crop center 40% (to avoid square color, focus on piece)
         roi = image[y+int(s*0.3):y+int(s*0.7), x+int(s*0.3):x+int(s*0.7)]
+        if roi.size == 0:
+            return 'empty'
         
-        # Calculate average brightness
         gray_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         avg_brightness = np.mean(gray_roi)
+        std_dev = np.std(gray_roi)
         
-        # Calculate color variance (pieces are usually not solid color, empty squares are)
-        # std_dev = np.std(gray_roi)
+        # Low variance indicates empty square
+        if std_dev < 25:
+            return 'empty'
         
-        # Heuristics for Chess.com Default Theme
-        # White pieces: High brightness (> 200)
-        # Black pieces: Low brightness (< 80)
-        # Empty squares:
-        #   Light square (White-ish): ~240 brightness? No, usually ~238.
-        #   Dark square (Green): ~100-150 brightness.
-        
-        # This is tricky because White Pieces on Light Squares are hard to distinguish by brightness alone.
-        # But White Pieces have black outlines/details.
-        # Black pieces on Dark Squares are also hard.
-        
-        # Better approach: Compare with "Empty" expectation?
-        # We don't have the empty board.
-        
-        # Let's use the "Diff" approach but guided by Legal Moves.
-        pass
+        # High brightness = white piece, low = black piece
+        if avg_brightness > 120:
+            return 'white'
+        else:
+            return 'black'
 
     def is_square_occupied_by_our_color(self, image, square_idx, is_white_perspective, is_white_turn):
         """

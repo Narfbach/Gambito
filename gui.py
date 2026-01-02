@@ -1,8 +1,8 @@
 import sys
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QHBoxLayout, QPushButton, QLabel, QSlider, 
-                               QTextEdit, QGroupBox, QDoubleSpinBox)
-from PySide6.QtCore import Qt, QTimer, Signal, QObject
+                               QTextEdit, QGroupBox, QDoubleSpinBox, QCheckBox)
+from PySide6.QtCore import Qt, Signal, QObject
 from PySide6.QtGui import QFont
 
 # Defer import to avoid DPI context conflict
@@ -106,7 +106,6 @@ class MainWindow(QMainWindow):
         settings_layout.addLayout(delay_layout)
 
         # Bullet Mode Checkbox
-        from PySide6.QtWidgets import QCheckBox
         self.bullet_check = QCheckBox("Bullet Mode (Smart Timing)")
         self.bullet_check.setToolTip("Optimized for Bullet games: Ultra fast openings, variable midgame delays.")
         self.bullet_check.stateChanged.connect(self.update_bullet_mode)
@@ -178,7 +177,7 @@ class MainWindow(QMainWindow):
         self.bot.set_humanization_delay(min_d, max_d)
 
     def update_bullet_mode(self, state):
-        enabled = state == 2 # Qt.Checked is 2
+        enabled = state == Qt.CheckState.Checked.value
         self.bot.set_bullet_mode(enabled)
         
         # Disable manual delay spinners if Bullet Mode is on

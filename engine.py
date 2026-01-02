@@ -28,16 +28,23 @@ class ChessEngine:
                 final_path = path
                 break
         
-        # If not found, search for wildcard stockfish*.exe
+        # If not found, search for stockfish binary
         if not final_path:
             for directory in search_dirs:
-                if not os.path.exists(directory): continue
+                if not os.path.exists(directory):
+                    continue
                 for file in os.listdir(directory):
-                    if file.lower().startswith("stockfish") and file.lower().endswith(".exe"):
+                    name_lower = file.lower()
+                    # Match stockfish.exe (Windows) or stockfish (Unix)
+                    if name_lower.startswith("stockfish") and (
+                        name_lower.endswith(".exe") or 
+                        not "." in name_lower
+                    ):
                         final_path = os.path.join(directory, file)
                         print(f"Auto-detected Stockfish: {final_path}")
                         break
-                if final_path: break
+                if final_path:
+                    break
 
         if not final_path:
             print(f"Warning: Stockfish not found. Checked in: {search_dirs}")
@@ -46,11 +53,12 @@ class ChessEngine:
         
         try:
             self.engine = Stockfish(path=stockfish_path)
-            # Default to a moderate level
-            self.set_elo_rating(1350)
+            self.current_elo = 2850
+            self.set_elo_rating(2850)
         except Exception as e:
             print(f"Error initializing Stockfish: {e}")
             self.engine = None
+            self.current_elo = 0
 
     def set_elo_rating(self, elo):
         """
@@ -60,26 +68,22 @@ class ChessEngine:
         if self.engine:
             # Ensure ELO is within valid bounds (1350 - 2850)
             elo = max(1350, min(2850, elo))
+            self.current_elo = elo
             
             # Update UCI options
-            print(f"DEBUG: Setting UCI_LimitStrength=true, UCI_Elo={elo}")
             self.engine.update_engine_parameters({
                 "UCI_LimitStrength": "true",
                 "UCI_Elo": elo
             })
-            
-            # Verify parameters
-            params = self.engine.get_parameters()
-            print(f"DEBUG: Current Engine Params: LimitStrength={params.get('UCI_LimitStrength')}, Elo={params.get('UCI_Elo')}")
 
             # Dynamic Depth Adjustment
-            # 1350 -> Depth 1
-            # 2850 -> Depth 15
-            # Formula: 1 + (elo - 1350) / (2850 - 1350) * 14
+            # 1350 -> Depth 1, 2850 -> Depth 15
             depth = int(1 + (elo - 1350) / 1500 * 14)
             self.engine.set_depth(depth)
-            
-            print(f"Engine configured: ELO={elo}, Depth={depth}")
+    
+    def get_elo(self):
+        """Returns the current ELO rating."""
+        return self.current_elo
 
     def set_skill_level(self, level):
         """

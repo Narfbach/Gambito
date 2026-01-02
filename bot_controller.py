@@ -1,7 +1,8 @@
 import time
+import random
 import threading
 import chess
-import keyboard
+import requests
 from vision import Vision
 from engine import ChessEngine
 from input import human_drag
@@ -16,10 +17,11 @@ class BotController:
         self.board = None
         self.log_messages = []
         self.log_callback = None
-        self.humanization_delay = (0.1, 0.5) # Min, Max
+        self.humanization_delay = (0.1, 0.5)  # Min, Max
         self.bullet_mode = False
         self.move_count = 0
-        self.pending_elo = None  # Store ELO if set before engine initialization
+        self.current_elo = 2850  # Track current ELO setting
+        self.pending_elo = 2850  # ELO to apply when engine initializes
 
     def set_log_callback(self, callback):
         self.log_callback = callback
@@ -34,12 +36,12 @@ class BotController:
 
     def set_elo(self, elo):
         """Sets the engine ELO and logs the change"""
+        self.current_elo = elo
         if self.engine:
             self.engine.set_elo_rating(elo)
-            self.log(f"✓ Engine ELO changed to {elo}")
+            self.log(f"✓ ELO: {elo}")
         else:
             self.pending_elo = elo
-            self.log(f"⚠ Engine not ready. ELO {elo} will be applied when bot starts.")
 
     def set_humanization_delay(self, min_delay, max_delay):
         self.humanization_delay = (min_delay, max_delay)
@@ -64,6 +66,10 @@ class BotController:
         self.is_running = False
         if self.thread:
             self.thread.join(timeout=1.0)
+        # Cleanup resources
+        self.engine = None
+        self.vision = None
+        self.board = None
         self.log("Bot stopped.")
 
     def toggle_pause(self):
@@ -72,7 +78,6 @@ class BotController:
         self.log(f"Bot {state}")
 
     def get_smart_delay(self):
-        import random
         if not self.bullet_mode:
             return random.uniform(*self.humanization_delay)
         
@@ -97,12 +102,10 @@ class BotController:
         self.vision = Vision()
         self.engine = ChessEngine()
         self.board = chess.Board()
-        
-        # Apply pending ELO if GUI slider was moved before starting
-        if self.pending_elo is not None:
-            self.engine.set_elo_rating(self.pending_elo)
-            self.log(f"✓ Applied pending ELO: {self.pending_elo}")
-            self.pending_elo = None
+
+        # Apply ELO setting (from slider or default)
+        self.engine.set_elo_rating(self.current_elo)
+        self.log(f"✓ Engine ready: ELO {self.current_elo}")
 
         if self.engine.engine is None:
             self.log("Critical Error: Stockfish engine not found.")
@@ -118,7 +121,6 @@ class BotController:
         self.log("Board found! Waiting for API connection...")
 
         # 2. Wait for API (Game State)
-        import requests
         api_url = "http://127.0.0.1:5000/get_state"
         
         last_fen = None
