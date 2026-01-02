@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chess Bot - Asset Defense</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="background-glow"></div>
+    
+    <nav>
+        <div class="logo">
+            <div class="logo-icon"></div>
+        </div>
+        <div class="nav-links">
+            <a href="#" class="active">Dashboard</a>
+            <a href="#">Settings</a>
+            <a href="#">Logs</a>
+        </div>
+        <div class="user-profile">
+            <span>Admin</span>
+        </div>
+    </nav>
+
+    <main>
+        <div class="hero-section">
+            <div class="status-indicator" id="status-badge">
+                <span class="dot"></span> <span id="status-text">Offline</span>
+            </div>
+            
+            <h1>Ultimate Chess<br><span>Domination</span></h1>
+            <p>Advanced computer vision & human-like input for undetectable gameplay.</p>
+            
+            <div class="controls">
+                <button id="btn-start" class="btn-primary" onclick="startBot()">
+                    <span>Start Engine</span>
+                    <div class="btn-glow"></div>
+                </button>
+                <button id="btn-pause" class="btn-secondary" onclick="pauseBot()" disabled>
+                    Pause
+                </button>
+                <button id="btn-stop" class="btn-danger" onclick="stopBot()" disabled>
+                    Stop
+                </button>
+            </div>
+        </div>
+
+        <div class="dashboard-grid">
+            <div class="card logs-card">
+                <h3>Live Logs</h3>
+                <div class="logs-container" id="logs-container">
+                    <div class="log-entry">System initialized...</div>
+                </div>
+            </div>
+            
+            <div class="card stats-card">
+                <h3>Performance</h3>
+                <div class="stat-row">
+                    <span>Engine</span>
+                    <span class="stat-value">Stockfish 16</span>
+                </div>
+                <div class="stat-row">
+                    <span>Vision</span>
+                    <span class="stat-value">Active</span>
+                </div>
+                <div class="stat-row">
+                    <span>Humanization</span>
+                    <span class="stat-value">98%</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let isRunning = false;
+        let isPaused = false;
+
+        function updateUI(status) {
+            isRunning = status.running;
+            isPaused = status.paused;
+            
+            const statusText = document.getElementById('status-text');
+            const statusBadge = document.getElementById('status-badge');
+            const btnStart = document.getElementById('btn-start');
+            const btnPause = document.getElementById('btn-pause');
+            const btnStop = document.getElementById('btn-stop');
+
+            if (isRunning) {
+                if (isPaused) {
+                    statusText.textContent = "Paused";
+                    statusBadge.className = "status-indicator paused";
+                    btnPause.textContent = "Resume";
+                } else {
+                    statusText.textContent = "Active";
+                    statusBadge.className = "status-indicator active";
+                    btnPause.textContent = "Pause";
+                }
+                btnStart.disabled = true;
+                btnPause.disabled = false;
+                btnStop.disabled = false;
+            } else {
+                statusText.textContent = "Offline";
+                statusBadge.className = "status-indicator";
+                btnStart.disabled = false;
+                btnPause.disabled = true;
+                btnStop.disabled = true;
+                btnPause.textContent = "Pause";
+            }
+
+            // Update logs
+            const logsContainer = document.getElementById('logs-container');
+            logsContainer.innerHTML = '';
+            status.logs.forEach(log => {
+                const div = document.createElement('div');
+                div.className = 'log-entry';
+                div.textContent = `> ${log}`;
+                logsContainer.appendChild(div);
+            });
+            logsContainer.scrollTop = logsContainer.scrollHeight;
+        }
+
+        async function startBot() {
+            await fetch('/api/start', { method: 'POST' });
+        }
+
+        async function stopBot() {
+            await fetch('/api/stop', { method: 'POST' });
+        }
+
+        async function pauseBot() {
+            await fetch('/api/pause', { method: 'POST' });
+        }
+
+        setInterval(async () => {
+            try {
+                const res = await fetch('/api/status');
+                const data = await res.json();
+                updateUI(data);
+            } catch (e) {
+                console.error(e);
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

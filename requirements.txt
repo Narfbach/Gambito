@@ -1,0 +1,11 @@
+flask
+flask-cors
+keyboard
+numpy
+opencv-python
+pyautogui
+PySide6
+python-chess
+requests
+scipy
+stockfish
