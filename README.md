@@ -5,16 +5,18 @@ Chess bot for Chess.com with computer vision, Stockfish integration, and humaniz
 ## Features
 
 - **Computer Vision**: Automatic board detection using OpenCV
-- **Stockfish Engine**: Configurable ELO (1350-2850)
+- **Stockfish Engine**: Configurable ELO (1350-2850) with auto-restart on crash
 - **Humanized Input**: Bezier curve mouse movements with variable delays
 - **Bullet Mode**: Smart timing for fast games (ultra-fast openings, random hesitations)
-- **Dual Interface**: Native GUI (PySide6) + Web Dashboard (Flask)
-- **Browser Bridge**: Userscript for real-time game state sync
+- **Global Hotkeys**: Control the bot from anywhere (F6 Start, F7 Pause, F8 Stop)
+- **Chrome Extension**: Reliable board state detection via DOM parsing
+- **FEN Validation**: Automatic correction of invalid FEN positions
 
 ## Requirements
 
 - Python 3.10+
 - Stockfish executable ([download](https://stockfishchess.org/download/))
+- Google Chrome
 
 ## Installation
 
@@ -23,6 +25,14 @@ pip install -r requirements.txt
 ```
 
 Download Stockfish and place `stockfish.exe` (or `stockfish` on Linux/Mac) in the project root.
+
+### Chrome Extension Setup
+
+1. Open Chrome and go to `chrome://extensions/`
+2. Enable **Developer mode** (top right)
+3. Click **Load unpacked**
+4. Select the `chrome-extension` folder from this project
+5. The extension will automatically activate on Chess.com
 
 ## Usage
 
@@ -34,18 +44,20 @@ python gui.py
 
 This starts both the native control panel and the Flask bridge server.
 
-### Browser Setup
+### Global Hotkeys
 
-1. Install [Tampermonkey](https://www.tampermonkey.net/)
-2. Create a new script with the contents of `connector.js`
-3. Open Chess.com and start a game
+| Key | Action |
+|-----|--------|
+| **F6** | Start bot |
+| **F7** | Pause/Resume |
+| **F8** | Stop bot |
 
 ## Architecture
 
 ```
 ┌─────────────────┐      ┌──────────────────┐
-│   Chess.com     │──────│  connector.js    │
-│   (Browser)     │      │  (Userscript)    │
+│   Chess.com     │──────│ Chrome Extension │
+│   (Browser)     │      │  (content.js)    │
 └─────────────────┘      └────────┬─────────┘
                                   │ HTTP POST
                          ┌────────▼─────────┐
@@ -70,14 +82,13 @@ This starts both the native control panel and the Flask bridge server.
 
 | File | Description |
 |------|-------------|
-| `gui.py` | Native PySide6 control panel |
+| `gui.py` | Native PySide6 control panel with hotkeys |
 | `bot_controller.py` | Core game loop and bot logic |
-| `vision.py` | Board detection and move recognition |
-| `engine.py` | Stockfish wrapper with ELO control |
+| `vision.py` | Board detection and move execution |
+| `engine.py` | Stockfish wrapper with ELO control and FEN validation |
 | `input.py` | Humanized mouse movements |
 | `server.py` | Flask bridge for browser communication |
-| `connector.js` | Tampermonkey userscript for Chess.com |
-| `app.py` | Web dashboard (alternative to gui.py) |
+| `chrome-extension/` | Chrome extension for Chess.com integration |
 
 ## Configuration
 
