@@ -1,5 +1,5 @@
 """
-Gambito Chess Bot - Fixed Size Professional UI
+Gambito Chess Bot - Fixed Size Professional UI with Global Hotkeys
 """
 import sys
 import os
@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal, QObject
 from PySide6.QtGui import QColor, QPixmap
+from pynput import keyboard
 
 
 STYLESHEET = """
@@ -32,6 +33,7 @@ QLabel#sectionLabel { color: #2c3e50; font-size: 12px; font-weight: bold; margin
 QLabel#eloValue { color: #1A5276; font-size: 24px; font-weight: bold; }
 QLabel#statusLabel { font-size: 13px; font-weight: bold; padding: 6px 20px; border-radius: 14px; }
 QLabel#logsHeader { color: white; font-size: 12px; font-weight: bold; }
+QLabel#hotkeyLabel { color: rgba(255,255,255,0.8); font-size: 10px; }
 
 QPushButton {
     font-size: 12px; font-weight: bold; padding: 8px 16px;
@@ -78,6 +80,12 @@ class LogSignal(QObject):
     new_log = Signal(str)
 
 
+class HotkeySignal(QObject):
+    start = Signal()
+    pause = Signal()
+    stop = Signal()
+
+
 class GlassPanel(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -95,12 +103,17 @@ class MainWindow(QMainWindow):
         self.bot = bot_instance
         self.setWindowTitle("Gambito - Chess Bot")
         
-        # Fixed size window - not resizable
-        self.setFixedSize(480, 640)
+        self.setFixedSize(480, 680)
         
         self.log_signal = LogSignal()
         self.log_signal.new_log.connect(self.append_log)
         self.bot.set_log_callback(self.emit_log)
+
+        # Hotkey signals (for thread-safe GUI updates)
+        self.hotkey_signal = HotkeySignal()
+        self.hotkey_signal.start.connect(self.start_bot)
+        self.hotkey_signal.pause.connect(self.toggle_pause)
+        self.hotkey_signal.stop.connect(self.stop_bot)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -116,7 +129,6 @@ class MainWindow(QMainWindow):
         logo_path = os.path.join(os.path.dirname(__file__), "logo.png")
         logo_label = QLabel()
         pixmap = QPixmap(logo_path)
-        # Scale to fit width while maintaining aspect ratio
         scaled_pixmap = pixmap.scaledToWidth(280, Qt.SmoothTransformation)
         logo_label.setPixmap(scaled_pixmap)
         logo_label.setAlignment(Qt.AlignCenter)
@@ -146,20 +158,20 @@ class MainWindow(QMainWindow):
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
         
-        self.btn_start = QPushButton("Start")
+        self.btn_start = QPushButton("Start (F6)")
         self.btn_start.setObjectName("btnStart")
         self.btn_start.clicked.connect(self.start_bot)
         self.btn_start.setCursor(Qt.PointingHandCursor)
         self.btn_start.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
-        self.btn_pause = QPushButton("Pause")
+        self.btn_pause = QPushButton("Pause (F7)")
         self.btn_pause.setObjectName("btnPause")
         self.btn_pause.clicked.connect(self.toggle_pause)
         self.btn_pause.setEnabled(False)
         self.btn_pause.setCursor(Qt.PointingHandCursor)
         self.btn_pause.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         
-        self.btn_stop = QPushButton("Stop")
+        self.btn_stop = QPushButton("Stop (F8)")
         self.btn_stop.setObjectName("btnStop")
         self.btn_stop.clicked.connect(self.stop_bot)
         self.btn_stop.setEnabled(False)
@@ -250,6 +262,12 @@ class MainWindow(QMainWindow):
 
         main.addWidget(panel)
 
+        # Hotkey hint
+        hotkey_lbl = QLabel("Global Hotkeys: F6 = Start | F7 = Pause/Resume | F8 = Stop")
+        hotkey_lbl.setObjectName("hotkeyLabel")
+        hotkey_lbl.setAlignment(Qt.AlignCenter)
+        main.addWidget(hotkey_lbl)
+
         # Logs
         logs_lbl = QLabel("Live Logs")
         logs_lbl.setObjectName("logsHeader")
@@ -261,6 +279,26 @@ class MainWindow(QMainWindow):
         self.log_text.setFixedHeight(100)
         main.addWidget(self.log_text)
 
+        # Start global hotkey listener
+        self.setup_hotkeys()
+
+    def setup_hotkeys(self):
+        """Setup global hotkeys using pynput"""
+        def on_press(key):
+            try:
+                if key == keyboard.Key.f6:
+                    self.hotkey_signal.start.emit()
+                elif key == keyboard.Key.f7:
+                    self.hotkey_signal.pause.emit()
+                elif key == keyboard.Key.f8:
+                    self.hotkey_signal.stop.emit()
+            except:
+                pass
+
+        self.hotkey_listener = keyboard.Listener(on_press=on_press)
+        self.hotkey_listener.daemon = True
+        self.hotkey_listener.start()
+
     def emit_log(self, msg):
         self.log_signal.new_log.emit(msg)
 
@@ -269,26 +307,29 @@ class MainWindow(QMainWindow):
         self.log_text.verticalScrollBar().setValue(self.log_text.verticalScrollBar().maximum())
 
     def start_bot(self):
-        self.bot.start()
-        self.update_ui_state(True)
+        if not self.bot.is_running:
+            self.bot.start()
+            self.update_ui_state(True)
 
     def stop_bot(self):
-        self.bot.stop()
-        self.update_ui_state(False)
+        if self.bot.is_running:
+            self.bot.stop()
+            self.update_ui_state(False)
 
     def toggle_pause(self):
-        self.bot.toggle_pause()
-        if self.bot.is_paused:
-            self.btn_pause.setText("Resume")
-        else:
-            self.btn_pause.setText("Pause")
+        if self.bot.is_running:
+            self.bot.toggle_pause()
+            if self.bot.is_paused:
+                self.btn_pause.setText("Resume (F7)")
+            else:
+                self.btn_pause.setText("Pause (F7)")
 
     def update_ui_state(self, running):
         self.btn_start.setEnabled(not running)
         self.btn_stop.setEnabled(running)
         self.btn_pause.setEnabled(running)
         if not running:
-            self.btn_pause.setText("Pause")
+            self.btn_pause.setText("Pause (F7)")
 
     def update_elo(self):
         elo = self.elo_slider.value()
@@ -307,6 +348,12 @@ class MainWindow(QMainWindow):
         self.bot.set_bullet_mode(enabled)
         self.min_delay_spin.setEnabled(not enabled)
         self.max_delay_spin.setEnabled(not enabled)
+
+    def closeEvent(self, event):
+        """Stop hotkey listener on close"""
+        if hasattr(self, 'hotkey_listener'):
+            self.hotkey_listener.stop()
+        super().closeEvent(event)
 
 
 if __name__ == "__main__":

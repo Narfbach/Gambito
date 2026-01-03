@@ -1,110 +1,216 @@
 from stockfish import Stockfish
 import os
+import chess
 
 class ChessEngine:
     def __init__(self, stockfish_path="stockfish.exe"):
-        # Paths to check:
-        # 1. Provided path
-        # 2. Current working directory
-        # 3. Directory where this script is located (chess_bot folder)
+        self.stockfish_path = None
+        self.engine = None
+        self.current_elo = 2850
         
+        # Find stockfish executable
         possible_paths = [
             stockfish_path,
             os.path.join(os.getcwd(), stockfish_path),
             os.path.join(os.path.dirname(os.path.abspath(__file__)), stockfish_path)
         ]
         
-        # Also look for any .exe starting with stockfish in these directories
         search_dirs = [
             os.getcwd(),
             os.path.dirname(os.path.abspath(__file__))
         ]
 
-        final_path = None
-        
-        # Check exact matches first
         for path in possible_paths:
             if os.path.exists(path) and os.path.isfile(path):
-                final_path = path
+                self.stockfish_path = path
                 break
         
-        # If not found, search for stockfish binary
-        if not final_path:
+        if not self.stockfish_path:
             for directory in search_dirs:
                 if not os.path.exists(directory):
                     continue
                 for file in os.listdir(directory):
                     name_lower = file.lower()
-                    # Match stockfish.exe (Windows) or stockfish (Unix)
                     if name_lower.startswith("stockfish") and (
                         name_lower.endswith(".exe") or 
                         not "." in name_lower
                     ):
-                        final_path = os.path.join(directory, file)
-                        print(f"Auto-detected Stockfish: {final_path}")
+                        self.stockfish_path = os.path.join(directory, file)
+                        print(f"Auto-detected Stockfish: {self.stockfish_path}")
                         break
-                if final_path:
+                if self.stockfish_path:
                     break
 
-        if not final_path:
+        if not self.stockfish_path:
             print(f"Warning: Stockfish not found. Checked in: {search_dirs}")
         else:
-            stockfish_path = final_path
-        
+            self._init_engine()
+
+    def _init_engine(self):
+        """Initialize or reinitialize the Stockfish engine"""
         try:
-            self.engine = Stockfish(path=stockfish_path)
-            self.current_elo = 2850
-            self.set_elo_rating(2850)
+            if self.engine:
+                try:
+                    self.engine.send_quit_command()
+                except:
+                    pass
+            
+            self.engine = Stockfish(path=self.stockfish_path)
+            self.set_elo_rating(self.current_elo)
+            print(f"Stockfish engine initialized (ELO: {self.current_elo})")
+            return True
         except Exception as e:
             print(f"Error initializing Stockfish: {e}")
             self.engine = None
-            self.current_elo = 0
+            return False
+
+    def _ensure_engine(self):
+        """Ensure engine is running, restart if crashed"""
+        if self.engine is None:
+            return self._init_engine()
+        
+        try:
+            self.engine.get_parameters()
+            return True
+        except:
+            print("Stockfish crashed, restarting...")
+            return self._init_engine()
+
+    def _validate_and_fix_fen(self, fen):
+        """Validate FEN and fix common issues"""
+        try:
+            parts = fen.split(' ')
+            if len(parts) < 6:
+                # Pad missing parts
+                while len(parts) < 6:
+                    if len(parts) == 1:
+                        parts.append('w')  # Turn
+                    elif len(parts) == 2:
+                        parts.append('-')  # Castling
+                    elif len(parts) == 3:
+                        parts.append('-')  # En passant
+                    elif len(parts) == 4:
+                        parts.append('0')  # Halfmove
+                    elif len(parts) == 5:
+                        parts.append('1')  # Fullmove
+            
+            position = parts[0]
+            turn = parts[1]
+            castling = parts[2]
+            
+            # Use python-chess to validate and potentially correct castling rights
+            try:
+                board = chess.Board()
+                board.set_fen(' '.join(parts))
+                # If it works, the FEN is valid
+                return fen
+            except:
+                # Try to fix castling rights based on actual piece positions
+                board = chess.Board()
+                board.set_board_fen(position)
+                
+                # Calculate valid castling rights
+                valid_castling = ''
+                
+                # White kingside
+                if (board.piece_at(chess.E1) == chess.Piece(chess.KING, chess.WHITE) and
+                    board.piece_at(chess.H1) == chess.Piece(chess.ROOK, chess.WHITE)):
+                    valid_castling += 'K'
+                
+                # White queenside
+                if (board.piece_at(chess.E1) == chess.Piece(chess.KING, chess.WHITE) and
+                    board.piece_at(chess.A1) == chess.Piece(chess.ROOK, chess.WHITE)):
+                    valid_castling += 'Q'
+                
+                # Black kingside
+                if (board.piece_at(chess.E8) == chess.Piece(chess.KING, chess.BLACK) and
+                    board.piece_at(chess.H8) == chess.Piece(chess.ROOK, chess.BLACK)):
+                    valid_castling += 'k'
+                
+                # Black queenside
+                if (board.piece_at(chess.E8) == chess.Piece(chess.KING, chess.BLACK) and
+                    board.piece_at(chess.A8) == chess.Piece(chess.ROOK, chess.BLACK)):
+                    valid_castling += 'q'
+                
+                if not valid_castling:
+                    valid_castling = '-'
+                
+                fixed_fen = f"{position} {turn} {valid_castling} - 0 1"
+                
+                # Verify the fixed FEN works
+                try:
+                    board.set_fen(fixed_fen)
+                    return fixed_fen
+                except:
+                    # Last resort: no castling
+                    return f"{position} {turn} - - 0 1"
+                    
+        except Exception as e:
+            print(f"FEN validation error: {e}")
+            return None
 
     def set_elo_rating(self, elo):
-        """
-        Sets the engine ELO rating using UCI_LimitStrength and UCI_Elo.
-        Also adjusts depth to match the ELO level.
-        """
+        """Sets the engine ELO rating"""
+        elo = max(1350, min(2850, elo))
+        self.current_elo = elo
+        
         if self.engine:
-            # Ensure ELO is within valid bounds (1350 - 2850)
-            elo = max(1350, min(2850, elo))
-            self.current_elo = elo
-            
-            # Update UCI options
-            self.engine.update_engine_parameters({
-                "UCI_LimitStrength": "true",
-                "UCI_Elo": elo
-            })
-
-            # Dynamic Depth Adjustment
-            # 1350 -> Depth 1, 2850 -> Depth 15
-            depth = int(1 + (elo - 1350) / 1500 * 14)
-            self.engine.set_depth(depth)
+            try:
+                self.engine.update_engine_parameters({
+                    "UCI_LimitStrength": "true",
+                    "UCI_Elo": elo
+                })
+                
+                depth = int(1 + (elo - 1350) / 1500 * 14)
+                self.engine.set_depth(depth)
+            except:
+                pass
     
     def get_elo(self):
-        """Returns the current ELO rating."""
         return self.current_elo
 
     def set_skill_level(self, level):
-        """
-        Legacy method. Use set_elo_rating instead.
-        """
         pass
 
     def get_best_move(self, fen):
-        """
-        Returns the best move for the given FEN.
-        """
-        if self.engine:
-            self.engine.set_fen_position(fen)
-            return self.engine.get_best_move()
-        return None
+        """Returns the best move for the given FEN, with error handling"""
+        # Validate and potentially fix the FEN
+        validated_fen = self._validate_and_fix_fen(fen)
+        if not validated_fen:
+            print(f"Could not validate FEN: {fen}")
+            return None
+        
+        if not self._ensure_engine():
+            return None
+        
+        try:
+            self.engine.set_fen_position(validated_fen)
+            move = self.engine.get_best_move()
+            return move
+        except Exception as e:
+            print(f"Stockfish error with FEN '{validated_fen}': {e}")
+            
+            # Try to restart and retry once
+            if self._init_engine():
+                try:
+                    self.engine.set_fen_position(validated_fen)
+                    return self.engine.get_best_move()
+                except Exception as e2:
+                    print(f"Retry failed: {e2}")
+            
+            return None
 
     def is_move_correct(self, fen, move):
-        """
-        Checks if a move is valid/good.
-        """
-        if self.engine:
-            self.engine.set_fen_position(fen)
+        """Checks if a move is valid"""
+        validated_fen = self._validate_and_fix_fen(fen)
+        if not validated_fen:
+            return False
+            
+        if not self._ensure_engine():
+            return False
+        
+        try:
+            self.engine.set_fen_position(validated_fen)
             return self.engine.is_move_correct(move)
-        return False
+        except:
+            return False
