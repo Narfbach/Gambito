@@ -13,7 +13,7 @@
     let isConnected = false;
     let lastPlayerColor = null;
 
-    console.log('%c[GAMBITO] Chess Connector v6.0 (A.C.A.S style)', 'color: #5DADE2; font-weight: bold;');
+    console.log('%c[GAMBITO] Chess Connector v6.0', 'color: #5DADE2; font-weight: bold;');
 
     // Piece class to FEN mapping
     const PIECE_MAP = {
